@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Word Scramble Game</title>
+    <style>
+        body { font-family: Arial, sans-serif; }
+        .container { max-width: 600px; margin: 0 auto; text-align: center; }
+        .word { font-size: 2em; margin: 20px 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Word Scramble Game</h1>
+        <div class="word" id="scrambled-word"></div>
+        <input type="text" id="guess-input" placeholder="Your guess here" />
+        <button id="submit-guess">Submit Guess</button>
+        <div id="result" style="margin-top: 20px;"></div>
+    </div>
+    <script>
+        const words = ['javascript', 'html', 'css', 'react', 'node'];
+        let selectedWord = words[Math.floor(Math.random() * words.length)];
+        let scrambledWord = selectedWord.split('').sort(() => 0.5 - Math.random()).join('');
+        document.getElementById('scrambled-word').innerText = scrambledWord;
+
+        document.getElementById('submit-guess').addEventListener('click', () => {
+            const guess = document.getElementById('guess-input').value;
+            const result = document.getElementById('result');
+            if (guess.toLowerCase() === selectedWord) {
+                result.innerText = 'Correct!';
+            } else {
+                result.innerText = 'Try again!';
+            }
+        });
+    </script>
+</body>
+</html>
