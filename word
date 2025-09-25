@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Word Scramble — Compassionate Edition</title>
+  <style>
+    :root{
+      --bg:#0f1724; --card:#0b1220; --accent:#7dd3fc; --muted:#94a3b8; --glass: rgba(255,255,255,0.03);
+      --success:#34d399; --danger:#fb7185; --cardpad:20px;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    }
+    *{box-sizing:border-box}
+    body{margin:0; min-height:100vh; background:linear-gradient(180deg,#021028 0%, #071025 60%), var(--bg); color:#e6eef6; display:flex; align-items:center; justify-content:center; padding:24px}
+    .container{width:100%; max-width:900px}
+    header{display:flex; gap:12px; align-items:center; margin-bottom:18px}
+    h1{font-size:20px;margin:0}
+    .card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); border-radius:14px; padding:var(--cardpad); box-shadow:0 6px 20px rgba(2,6,23,0.6)}
+    .top-row{display:flex; gap:12px; align-items:center; justify-content:space-between; margin-bottom:12px}
+    .meta{display:flex; gap:12px; align-items:center}
+    .pill{background:var(--glass); padding:6px 10px; border-radius:999px; color:var(--muted); font-size:13px}
+    .scramble{font-weight:700; letter-spacing:2px; font-size:28px; text-align:center; padding:18px 12px; margin:10px 0; border-radius:10px; background:linear-gradient(90deg, rgba(125,211,252,0.05), rgba(125,211,252,0.02));}
+    .controls{display:flex; gap:8px; align-items:center; justify-content:center; flex-wrap:wrap}
+    input[type="text"]{padding:12px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.04); background:transparent; color:inherit; min-width:220px}
+    button{cursor:pointer; padding:10px 12px; border-radius:10px; border:0; background:var(--accent); color:#002; font-weight:600}
+    button.secondary{background:transparent; border:1px solid rgba(255,255,255,0.04); color:var(--muted)}
+    .hint{color:var(--muted); font-size:13px; text-align:center; margin-top:8px}
+    .status{display:flex; gap:10px; align-items:center}
+    .big{font-size:18px; font-weight:700}
+
+    .footer{display:flex; gap:10px; justify-content:space-between; align-items:center; margin-top:12px; color:var(--muted); font-size:13px}
+    .partial{letter-spacing:3px; font-weight:700; text-align:center; margin-top:8px}
+
+    @media (max-width:600px){ .scramble{font-size:20px} input[type="text"]{min-width:140px} }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <header>
+        <div>
+          <h1>Word Scramble — Console-to-Web</h1>
+          <div style="color:var(--muted); font-size:13px">Unscramble words from your list. Hint costs -3. Correct +10. Wrong/skip -2.</div>
+        </div>
+        <div style="margin-left:auto;text-align:right">
+          <div class="pill" id="scorePill">Score: 0</div>
+          <div class="pill" style="margin-top:6px" id="roundPill">Word 0 / 0</div>
+        </div>
+      </header>
+
+      <div class="top-row">
+        <div class="meta">
+          <div class="pill" id="attemptsPill">Attempts: 0</div>
+          <div class="pill" id="wordsLeftPill">Words left: 0</div>
+        </div>
+        <div class="status">
+          <div class="pill">Hint = -3pts</div>
+          <div class="pill">Wrong = -2pts</div>
+        </div>
+      </div>
+
+      <div class="scramble" id="scrambledWord">—</div>
+
+      <div style="display:flex; gap:12px; align-items:center; justify-content:center; flex-wrap:wrap">
+        <div style="flex:1; min-width:220px; max-width:540px">
+          <input id="guessInput" type="text" placeholder="Type your guess here" autocomplete="off" />
+        </div>
+
+        <div class="controls">
+          <button id="submitBtn">Submit</button>
+          <button class="secondary" id="hintBtn">Hint</button>
+          <button class="secondary" id="skipBtn">Skip</button>
+          <button class="secondary" id="newRoundBtn">New Round</button>
+        </div>
+      </div>
+
+      <div class="hint" id="messageArea">Good luck!</div>
+      <div class="partial" id="partialReveal"> </div>
+
+      <div class="footer">
+        <div>Words: <span id="wordListCount"></span></div>
+        <div style="text-align:right">Made for you — save this page as <code>word-scramble.html</code> and open in a browser.</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Word list (from the user). Keep spacing/casing as provided.
+    const WORDS = [
+      "compassionate",
+      "technologist",
+      "enterprising",
+      "voracious",
+      "temperament",
+      "perseverance",
+      "determination",
+      "instrumental",
+      "apprehension",
+      "argumentative",
+      "blissful",
+      "lighthearted",
+      "transcendent",
+      "accommodating",
+      "well respected",
+      "Changemaker",
+      "activist"
+    ];
+
+    // scoring constants
+    const POINTS_CORRECT = 10;
+    const POINTS_WRONG = -2;
+    const POINTS_HINT = -3;
+    const MAX_ATTEMPTS = 3;
+
+    // state
+    let words = [];
+    let currentIndex = -1;
+    let currentWord = '';
+    let scrambled = '';
+    let attemptsLeft = MAX_ATTEMPTS;
+    let score = 0;
+    let revealed = [];
+
+    // elements
+    const scrambledWordEl = document.getElementById('scrambledWord');
+    const guessInput = document.getElementById('guessInput');
+    const submitBtn = document.getElementById('submitBtn');
+    const hintBtn = document.getElementById('hintBtn');
+    const skipBtn = document.getElementById('skipBtn');
+    const newRoundBtn = document.getElementById('newRoundBtn');
+    const messageArea = document.getElementById('messageArea');
+    const partialRevealEl = document.getElementById('partialReveal');
+    const scorePill = document.getElementById('scorePill');
+    const roundPill = document.getElementById('roundPill');
+    const attemptsPill = document.getElementById('attemptsPill');
+    const wordsLeftPill = document.getElementById('wordsLeftPill');
+    const wordListCount = document.getElementById('wordListCount');
+
+    // init
+    function init() {
+      wordListCount.textContent = WORDS.length;
+      resetGame();
+      attachListeners();
+    }
+
+    function resetGame() {
+      words = shuffle(Array.from(WORDS));
+      currentIndex = -1;
+      score = 0;
+      updateScore();
+      nextWord();
+    }
+
+    function nextWord() {
+      currentIndex++;
+      if (currentIndex >= words.length) {
+        // round finished
+        scrambledWordEl.textContent = 'Round complete!';
+        messageArea.textContent = `Round complete — Final score: ${score}`;
+        partialRevealEl.textContent = '';
+        roundPill.textContent = `Word ${words.length} / ${words.length}`;
+        wordsLeftPill.textContent = 0;
+        attemptsPill.textContent = 0;
+        return;
+      }
+
+      currentWord = words[currentIndex];
+      scrambled = scramblePreserveSpaces(currentWord);
+      attemptsLeft = MAX_ATTEMPTS;
+      revealed = currentWord.split('').map(ch => ch === ' ');
+
+      renderCurrent();
+      guessInput.value = '';
+      guessInput.focus();
+      messageArea.textContent = 'Guess the word!';
+    }
+
+    function renderCurrent() {
+      scrambledWordEl.textContent = scrambled;
+      roundPill.textContent = `Word ${currentIndex+1} / ${words.length}`;
+      attemptsPill.textContent = `Attempts: ${attemptsLeft}`;
+      wordsLeftPill.textContent = words.length - (currentIndex+1);
+      partialRevealEl.textContent = buildPartialReveal(currentWord, revealed);
+      updateScore();
+    }
+
+    function attachListeners() {
+      submitBtn.addEventListener('click', onSubmit);
+      guessInput.addEventListener('keydown', e => { if (e.key === 'Enter') onSubmit(); });
+      hintBtn.addEventListener('click', onHint);
+      skipBtn.addEventListener('click', onSkip);
+      newRoundBtn.addEventListener('click', () => { if (confirm('Start a new round? Your score will reset.')) resetGame(); });
+    }
+
+    function onSubmit() {
+      if (!currentWord) return;
+      const guess = guessInput.value.trim();
+      if (!guess) { messageArea.textContent = 'Type a guess or use Hint/Skip.'; return; }
+
+      if (normalize(guess) === normalize(currentWord)) {
+        score += POINTS_CORRECT;
+        messageArea.textContent = `Correct! +${POINTS_CORRECT} points.`;
+        updateScore();
+        // reveal fully
+        revealed = currentWord.split('').map(ch => ch === ' ' || true);
+        partialRevealEl.textContent = buildPartialReveal(currentWord, revealed);
+        // small delay then move to next word
+        setTimeout(nextWord, 900);
+      } else {
+        attemptsLeft--;
+        score += POINTS_WRONG;
+        updateScore();
+        if (attemptsLeft <= 0) {
+          messageArea.textContent = `Out of attempts — The word was: "${currentWord}"`;
+          // show full and move on after a short delay
+          revealed = currentWord.split('').map(ch => ch === ' ' || true);
+          partialRevealEl.textContent = buildPartialReveal(currentWord, revealed);
+          setTimeout(nextWord, 1200);
+        } else {
+          messageArea.textContent = `Not correct. ${POINTS_WRONG} pts. Try again.`;
+          partialRevealEl.textContent = buildPartialReveal(currentWord, revealed);
+        }
+      }
+      guessInput.value = '';
+      guessInput.focus();
+      renderCurrent();
+    }
+
+    function onHint() {
+      if (!currentWord) return;
+      const idx = pickRandomUnrevealedIndex(currentWord, revealed);
+      if (idx === -1) {
+        messageArea.textContent = 'All letters revealed.';
+        return;
+      }
+      revealed[idx] = true;
+      score += POINTS_HINT;
+      messageArea.textContent = `Revealed letter ${idx+1}: '${currentWord[idx]}' (${POINTS_HINT} pts)`;
+      partialRevealEl.textContent = buildPartialReveal(currentWord, revealed);
+      updateScore();
+      renderCurrent();
+    }
+
+    function onSkip() {
+      if (!currentWord) return;
+      score += POINTS_WRONG;
+      messageArea.textContent = `Skipped. The word was: "${currentWord}" (${POINTS_WRONG} pts)`;
+      // reveal fully then next
+      revealed = currentWord.split('').map(ch => ch === ' ' || true);
+      partialRevealEl.textContent = buildPartialReveal(currentWord, revealed);
+      updateScore();
+      setTimeout(nextWord, 900);
+    }
+
+    // ------------------ Helpers ------------------
+    function normalize(s){ return s.trim().toLowerCase(); }
+
+    function updateScore(){ scorePill.textContent = `Score: ${score}`; }
+
+    function shuffle(arr){
+      // Fisher-Yates
+      for (let i = arr.length-1; i>0; i--){
+        const j = Math.floor(Math.random()*(i+1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      return arr;
+    }
+
+    function scramblePreserveSpaces(word){
+      const chars = word.split('');
+      const letters = chars.filter(c=>c!==' ');
+      let scrambled;
+      let attempts = 0;
+      do {
+        letters.sort(()=>Math.random()-0.5);
+        let li = 0;
+        const out = chars.map(c=> c===' ' ? ' ' : letters[li++]);
+        scrambled = out.join('');
+        attempts++;
+        if (attempts>30) break;
+      } while (normalize(scrambled) === normalize(word));
+      return scrambled;
+    }
+
+    function pickRandomUnrevealedIndex(original, revealedArr){
+      const choices = [];
+      for (let i=0;i<original.length;i++){
+        if (!revealedArr[i] && original[i] !== ' ') choices.push(i);
+      }
+      if (choices.length===0) return -1;
+      return choices[Math.floor(Math.random()*choices.length)];
+    }
+
+    function buildPartialReveal(original, revealedArr){
+      let out = '';
+      for (let i=0;i<original.length;i++){
+        if (original[i]===' ') out += ' ';
+        else out += revealedArr[i] ? original[i] : '_';
+      }
+      return out;
+    }
+
+    // start
+    init();
+  </script>
+</body>
+</html>
